@@ -45,6 +45,9 @@ AUTHOR_TEMPLATE="""<author fullname="Elwyn Davies" initials="E.B." role="editor"
 class Nroff2Xml:
     xml=''
     nroff=''
+    sections_list = []
+
+    t_open = False # Are we curently in <t> tag?
 
     def readNroff(self, infile):
         with open(infile) as f:
@@ -52,21 +55,25 @@ class Nroff2Xml:
 
         print("Read %d lines from %s file." % (len(self.nroff), infile))
 
-    def startSection(self, sections_list, lineno, section, section_title):
-        sections_list.append([section, section_title, lineno])
+    def startSection(self, lineno, section, section_title):
+        self.sections_list.append([section, section_title, lineno])
         print("Starting section %s (%s) in line %d." % (section, section_title, lineno))
+
+        if self.t_open:
+            self.xml += "</t>\n"
+            self.t_open = False
 
         self.xml += '<section title="' + section_title + '"> <!-- ' + section + ', line ' + str(lineno) + '-->\n'
 
-        return sections_list
-
-    def endSection(self, sections_list):
-        end_section = sections_list.pop()
+    def endSection(self):
+        end_section = self.sections_list.pop()
         print("Ending section " + end_section[0] + ", started in line " + str(end_section[2]))
 
-        self.xml += '</section> <!-- ends: "' + end_section[0] + " from line " + str(end_section[2]) + '-->\n'
+        if self.t_open:
+            self.xml += "</t>\n"
+            self.t_open = False
 
-        return sections_list
+        self.xml += '</section> <!-- ends: "' + end_section[0] + " from line " + str(end_section[2]) + '-->\n'
 
     def addPreamble(self):
         self.xml += PREAMBLE
@@ -102,22 +109,43 @@ class Nroff2Xml:
 
         self.xml += "</front>\n\n"
 
+    def convertText(self, line):
+        if not len(self.sections_list):
+            return
+
+        line = line.replace("<", "&lt;", 999)
+        line = line.replace(">", "&gt;", 999)
+
+        if not len(line):
+            if self.t_open:
+                self.xml += "</t>\n"
+                self.t_open = False
+        else:
+            # a line with text
+            if self.t_open:
+                self.xml += line + '\n'
+            else:
+                self.xml += "<t>" + line + '\n'
+                self.t_open = True
 
     def convert(self):
 
         section_re = re.compile("^\s*(\d+\.)(\d+\.)?(\d+\.)?(\d+\.)? (.+)*$") # Matches section number
         dotti0_re = re.compile("^\.ti\s*0\s*$") # matches .ti 0
+        nroff_contrl_re = re.compile("^\.")
 
         self.xml += "<middle>\n"
 
         likely_section = False
 
         # List of section info structures
-        sections_list = []
+        self.sections_list = []
 
         lineno = 0
         for line in self.nroff:
             lineno += 1
+
+            line = line.strip('\n\r')
 
             if dotti0_re.search(line):
                 likely_section = True
@@ -154,10 +182,10 @@ class Nroff2Xml:
                             section_lv3 = int(s.groups()[2][:-1])
                             section_lv4 = int(s.groups()[3][:-1])
 
-                if level > len(sections_list) + 1:
+                if level > len(self.sections_list) + 1:
                     print("\nError in line %d: parser thinks that the current section nest level is %d,\n"\
                           "but encountered a line that looks like level %d (%s). Sections levels can\n"\
-                          "only increase by one.\n" % (lineno, len(sections_list), level, line))
+                          "only increase by one.\n" % (lineno, len(self.sections_list), level, line))
                     sys.exit(1)
 
                 section_title = s.groups()[4]
@@ -171,21 +199,29 @@ class Nroff2Xml:
                 if level == 4:
                     section = ("%d.%d.%d.%d" % (section_lv1, section_lv2, section_lv3, section_lv4))
 
-                if level > len(sections_list):
-                    sections_list = self.startSection(sections_list, lineno, section, section_title)
+                if level > len(self.sections_list):
+                    self.startSection(lineno, section, section_title)
                 else:
-                    if level == len(sections_list):
-                        sections_list = self.endSection(sections_list)
-                        sections_list = self.startSection(sections_list, lineno, section, section_title)
+                    if level == len(self.sections_list):
+                        self.endSection()
+                        self.startSection(lineno, section, section_title)
                     else:
-                        while level <= len(sections_list):
-                            sections_list = self.endSection(sections_list)
-                        sections_list = self.startSection(sections_list, lineno, section, section_title)
+                        while level <= len(self.sections_list):
+                            self.endSection()
+                        self.startSection(lineno, section, section_title)
+
+                continue # end of section title processing
+
+            if nroff_contrl_re.search(line):
+                continue
+
+            # This is hopefully a regular text
+            self.convertText(line)
 
             likely_section = False
 
-        while len(sections_list):
-            sections_list = self.endSection(sections_list)
+        while len(self.sections_list):
+            self.endSection()
 
         self.xml += "</middle>\n"
 
