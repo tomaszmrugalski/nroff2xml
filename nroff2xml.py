@@ -23,20 +23,20 @@ HEADER_COMPACT='<?rfc compact="yes" ?>\n'
 HEADER_SUBCOMPACT='<?rfc subcompact="no" ?>\n'
 HEADER_CATEGORY='<rfc category="info" docName="draft-ietf-xml2rfc-template-05" ipr="trust200902">\n'
 
-AUTHOR_TEMPLATE="""<author fullname="Elwyn Davies" initials="E.B." role="editor"
-            surname="Davies">
-      <organization>Folly Consulting</organization>
+AUTHOR_TEMPLATE="""<author fullname="Unknown Person" initials="X" role="editor"
+            surname="Unknown">
+      <organization>Not converted</organization>
       <address>
         <postal>
           <street></street>
           <!-- Reorder these if your country does things differently -->
-          <city>Soham</city>
+          <city>Unknown</city>
           <region></region>
           <code></code>
-          <country>UK</country>
+          <country>Unknown</country>
         </postal>
-        <phone>+44 7889 488 335</phone>
-        <email>elwynd@dial.pipex.com</email>
+        <phone>+1 234 5678 9012</phone>
+        <email>someone@example.com</email>
         <!-- uri and facsimile elements may also be added -->
       </address>
     </author>"""
@@ -243,7 +243,8 @@ class Nroff2Xml:
 
     def addPostamble(self, infile):
         self.xml += "</rfc>\n"
-        self.xml += "<!-- generated from file " + infile + "with nroff2xml " + VERSION + " by Tomek Mrugalski -->\n"
+        self.xml += "<!-- generated from file " + infile + " with nroff2xml " + VERSION \
+            + " by Tomek Mrugalski -->\n"
 
     def writeXml(self, outfile):
 
