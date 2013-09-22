@@ -34,10 +34,13 @@ def convert(nroff):
     xml = PREAMBLE
     xml += DOCTYPE_BEGIN
 
-    section_re = re.compile("(\d+\.)(\d+\.)*(\d+\.)* ") # Matches section number
+    section_re = re.compile("^\s*(\d+\.)(\d+\.)?(\d+\.)?(\d+\.)? (.+)*$") # Matches section number
     dotti0_re = re.compile("^\.ti\s*0\s*$") # matches .ti 0
 
     likely_section = False
+
+    # List of section info structures
+    sections_list = []
 
     lineno = 0
     for line in nroff:
@@ -45,7 +48,7 @@ def convert(nroff):
 
         if dotti0_re.search(line):
             likely_section = True
-            print ("### Found section begin in line %d" % lineno)
+            #print ("### Found section begin in line %d" % lineno)
             continue
 
         s = section_re.search(line)
@@ -53,6 +56,7 @@ def convert(nroff):
         section_lv1 = 0
         section_lv2 = 0
         section_lv3 = 0
+        section_lv4 = 0
 
         if (s is not None):
             #print (s.groups(), s.groups()[0])
@@ -67,20 +71,59 @@ def convert(nroff):
                     level = 2
                     section_lv2 = int(s.groups()[1][:-1])
                 else:
-                    level = 3
-                    section_lv3 = int(s.groups()[2][:-1])
+                    if s.groups()[3] is None:
+                        level = 3
+                        section_lv2 = int(s.groups()[1][:-1])
+                        section_lv3 = int(s.groups()[2][:-1])
+                    else:
+                        level = 4
+                        section_lv2 = int(s.groups()[1][:-1])
+                        section_lv3 = int(s.groups()[2][:-1])
+                        section_lv4 = int(s.groups()[3][:-1])
+
+            if level > len(sections_list) + 1:
+                print("\nError in line %d: parser thinks that the current section nest level is %d,\n"\
+                      "but encountered a line that looks like level %d (%s). Sections levels can\n"\
+                      "only increase by one.\n" % (lineno, len(sections_list), level, line))
+                sys.exit(1)
+            
+            section_title = s.groups()[4]
+
             if level == 1:
-                print("%d: %s" % (section_lv1, line))
+                section = ("%d" % section_lv1)
             if level == 2:
-                print("%d.%d: %s" % (section_lv1, section_lv2, line))
+                section = ("%d.%d" % (section_lv1, section_lv2))
             if level == 3:
-                print("%d.%d.%d: %s" % (section_lv1, section_lv2, section_lv3, line))
+                section = ("%d.%d.%d" % (section_lv1, section_lv2, section_lv3))
+            if level == 4:
+                section = ("%d.%d.%d.%d" % (section_lv1, section_lv2, section_lv3, section_lv4))
 
-
+            if level > len(sections_list):
+                sections_list = startSection(sections_list, lineno, section, section_title)
+            else:
+                if level == len(sections_list):
+                    sections_list = endSection(sections_list)
+                    sections_list = startSection(sections_list, lineno, section, section_title)
+                else:
+                    while level <= len(sections_list):
+                        print("New level: %d, existing level: %d" % (level, len(sections_list)))
+                        sections_list = endSection(sections_list)
+                    sections_list = startSection(sections_list, lineno, section, section_title)
 
         likely_section = False
 
     return xml
+
+def startSection(sections_list, lineno, section, section_title):
+    sections_list.append([lineno, section])
+    print("Starting section %s (%s) in line %d." % (section, section_title, lineno))
+
+    return sections_list
+
+def endSection(sections_list):
+    end_section = sections_list.pop()
+    print(">")
+    return sections_list
 
 def writeXml(xml, outfile):
     f = open(outfile, "w")
