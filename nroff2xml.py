@@ -46,6 +46,7 @@ class Nroff2Xml:
     xml=''
     nroff=''
     sections_list = []
+    references = dict()
 
     t_open = False # Are we curently in <t> tag?
 
@@ -128,11 +129,77 @@ class Nroff2Xml:
                 self.xml += "<t>" + line + '\n'
                 self.t_open = True
 
+    def findReferences(self):
+
+        references_re = re.compile("^(\d+)\.? References*$")
+        references_end1_re = re.compile("^A\. .*$")
+        references_end2_re = re.compile("^Authors' Addresses")
+        reference_num = re.compile("^\[(.+)\] (.+\.)$")
+        nroff_control_re = re.compile("^\.")
+
+        lineno = 0
+        in_references = False
+
+        self.references = {}
+
+        ref = ""
+
+        for line in self.nroff:
+            lineno += 1
+
+            if not in_references:
+                m = references_re.match(line)
+                if m is None:
+                    continue
+                else:
+                    print("References start in line %d" % lineno)
+                    in_references = True
+                    continue
+
+            if in_references:
+                m = references_end1_re.match(line)
+                if m is not None:
+                    in_references = False
+                    print("References end in line %d" % lineno)
+                    break
+
+                m = references_end2_re.match(line)
+                if m is not None:
+                    in_references = False
+                    print("References end in line %d" % lineno)
+                    break
+
+            # ignore nroff control sequences
+            if nroff_control_re.match(line) is not None:
+                continue
+
+            ref = ref + line.strip('\n\r')
+
+            # ignore empty lines
+            if not len(line.strip('\n\r')):
+
+                m = reference_num.match(ref)
+                if m is not None:
+                    ref_id = m.groups()[0]
+                    ref_value = m.groups()[1]
+                    ref_value = ref_value.strip('\n\t')
+                    print("%s: %s" % (ref_id, ref_value))
+                    self.references[ref_id] = ref_value
+                ref = ""
+                continue
+
+
+        print("Found %d references." % len(self.references))
+
+        for key, value in self.references.items():
+            print("Reference %s [%s]" % (key, value))
+
+
     def convert(self):
 
         section_re = re.compile("^\s*(\d+\.)(\d+\.)?(\d+\.)?(\d+\.)? (.+)*$") # Matches section number
         dotti0_re = re.compile("^\.ti\s*0\s*$") # matches .ti 0
-        nroff_contrl_re = re.compile("^\.")
+        nroff_control_re = re.compile("^\.")
 
         self.xml += "<middle>\n"
 
@@ -145,7 +212,7 @@ class Nroff2Xml:
         for line in self.nroff:
             lineno += 1
 
-            line = line.strip('\n\r')
+            line = line.rstrip('\n\r')
 
             if dotti0_re.search(line):
                 likely_section = True
@@ -212,7 +279,7 @@ class Nroff2Xml:
 
                 continue # end of section title processing
 
-            if nroff_contrl_re.search(line):
+            if nroff_control_re.search(line):
                 continue
 
             # This is hopefully a regular text
@@ -272,6 +339,8 @@ class Nroff2Xml:
         convert = Nroff2Xml()
 
         convert.readNroff(infile)
+
+        convert.findReferences()
 
         convert.addPreamble()
 
