@@ -1,9 +1,9 @@
 #
-# Experimental nroff2xml 0.0.1
+# Experimental nroff2xml 0.0.2
 # Author: Tomek Mrugalski
 #
 
-VERSION = '0.0.1'
+VERSION='0.0.2'
 
 import sys
 import re
@@ -197,13 +197,22 @@ class Nroff2Xml:
 
     def convert(self):
 
-        section_re = re.compile("^\s*(\d+\.)(\d+\.)?(\d+\.)?(\d+\.)? (.+)*$") # Matches section number
-        dotti0_re = re.compile("^\.ti\s*0\s*$") # matches .ti 0
+        # Matches section number
+        section_re = re.compile("^\s*(\d+\.)(\d+\.)?(\d+\.)?(\d+\.)? (.+)*$")
+
+        # Matches .ti 0 (section headers)
+        dotti0_re = re.compile("^\.ti\s*0\s*$")
+
+        # nroff control sequences
         nroff_control_re = re.compile("^\.")
+
+        # Table of Contents
+        toc_re = re.compile("^Table [Oo]f [Cc]ontents");
 
         self.xml += "<middle>\n"
 
-        likely_section = False
+        in_toc = False
+        toc_line_begin = 0
 
         # List of section info structures
         self.sections_list = []
@@ -215,8 +224,17 @@ class Nroff2Xml:
             line = line.rstrip('\n\r')
 
             if dotti0_re.search(line):
-                likely_section = True
-                #print ("### Found section begin in line %d" % lineno)
+                if in_toc:
+                    in_toc = False
+                    print("Skipping table of contents (lines %d-%d)" % (toc_line_begin, lineno))
+                continue
+
+            if toc_re.search(line):
+                in_toc = True
+                toc_line_begin = lineno
+                continue
+
+            if in_toc:
                 continue
 
             s = section_re.search(line)
@@ -284,8 +302,6 @@ class Nroff2Xml:
 
             # This is hopefully a regular text
             self.convertText(line)
-
-            likely_section = False
 
         while len(self.sections_list):
             self.endSection()
