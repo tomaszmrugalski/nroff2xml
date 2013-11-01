@@ -41,6 +41,20 @@ AUTHOR_TEMPLATE="""<author fullname="Unknown Person" initials="X" role="editor"
       </address>
     </author>"""
 
+class Reference:
+    anchor = ''
+    new_anchor = 0
+    text = ''
+
+    def __init__(self, anchor, text):
+        self.anchor = anchor
+        self.text = text
+
+        rfc_regexp = re.compile("RFC\ ([0-9]+)")
+        rfc = rfc_regexp.search(text)
+        print(rfc)
+        if rfc is not None:
+            self.new_anchor = rfc.groups()[0]
 
 class Nroff2Xml:
     xml=''
@@ -183,8 +197,7 @@ class Nroff2Xml:
                     ref_id = m.groups()[0]
                     ref_value = m.groups()[1]
                     ref_value = ref_value.strip('\n\t')
-                    print("%s: %s" % (ref_id, ref_value))
-                    self.references[ref_id] = ref_value
+                    self.references[ref_id] = Reference(ref_id, ref_value)
                 ref = ""
                 continue
 
@@ -192,7 +205,7 @@ class Nroff2Xml:
         print("Found %d references." % len(self.references))
 
         for key, value in self.references.items():
-            print("Reference %s [%s]" % (key, value))
+            print("Reference %s [%s]" % (key, value.text))
 
 
     def convert(self):
@@ -315,6 +328,11 @@ class Nroff2Xml:
         #self.xml += '</references>\n'
         #self.xml += '<references title="Informative References">\n'
         #self.xml += '</references>\n'
+        for key, value in self.references.items():
+
+            print("Reference %s [%s]" % (key, value.new_anchor))
+            # self.xml += "<reference anchor=" + key +
+
         pass
 
     def addBack(self):
