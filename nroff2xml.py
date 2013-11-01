@@ -48,13 +48,17 @@ class Reference:
 
     def __init__(self, anchor, text):
         self.anchor = anchor
+        self.new_anchor = "UNKNOWN" + anchor
         self.text = text
 
         rfc_regexp = re.compile("RFC\ ([0-9]+)")
         rfc = rfc_regexp.search(text)
         print(rfc)
         if rfc is not None:
-            self.new_anchor = rfc.groups()[0]
+            num = str(rfc.groups()[0])
+            if len(num) < 4:
+                num = "0" + num
+            self.new_anchor = "RFC" + num
 
 class Nroff2Xml:
     xml=''
@@ -92,8 +96,20 @@ class Nroff2Xml:
 
     def addPreamble(self):
         self.xml += PREAMBLE
+
         self.xml += DOCTYPE_BEGIN
+        for key, value in self.references.items():
+            if value.new_anchor.find("RFC") == -1:
+                continue
+
+            rfc = value.new_anchor[3:]
+            if len(rfc) == 3:
+                rfc = "0" + rfc
+
+            self.xml += "<!ENTITY " + value.new_anchor + " PUBLIC \"\" \"http://xml.resource.org/public/rfc/bibxml/reference.RFC." \
+                + rfc + ".xml\">\n"
         self.xml += DOCTYPE_END
+
         self.xml += STYLESHEET
         self.xml += HEADER_STRICT
         self.xml += HEADER_TOC
@@ -102,6 +118,7 @@ class Nroff2Xml:
         self.xml += HEADER_SORTREFS
         self.xml += HEADER_COMPACT
         self.xml += HEADER_SUBCOMPACT
+
         self.xml += HEADER_CATEGORY
 
     def extractTitle(self):
@@ -124,12 +141,28 @@ class Nroff2Xml:
 
         self.xml += "</front>\n\n"
 
+    def expandReferences(self, line):
+        
+        for key, value in self.references.items():
+            old_anchor = "[" + str(value.anchor) + "]"
+            new_anchor = "<xref target=\"" + str(value.new_anchor) + "\"/>"
+
+            #print("#### replace %s = %s\n" % (old_anchor, new_anchor))
+
+            line = line.replace(old_anchor, new_anchor)
+
+            #sddfd
+            
+        return line
+
     def convertText(self, line):
         if not len(self.sections_list):
             return
 
         line = line.replace("<", "&lt;", 999)
         line = line.replace(">", "&gt;", 999)
+
+        line = self.expandReferences(line)
 
         if not len(line):
             if self.t_open:
@@ -324,16 +357,22 @@ class Nroff2Xml:
         return self.xml
 
     def addReferences(self):
-        #self.xml += '<references title="Normative References">\n'
-        #self.xml += '</references>\n'
-        #self.xml += '<references title="Informative References">\n'
-        #self.xml += '</references>\n'
+        self.xml += '<references title="Normative References">\n'
         for key, value in self.references.items():
+            
+            if value.new_anchor.find("RFC") == -1:
+                self.xml += "<reference anchor=\"" + value.new_anchor + "\">\n"
+                self.xml += "  <front>\n"
+                self.xml += "    <title>" + value.text + "</title>\n"
+                self.xml += "    <author><organization>?</organization></author>\n"
+                self.xml += "    <date year=\"1900\" />\n"
+                self.xml += "  </front>\n"
+                self.xml += "</reference>\n"
+            else:
+                self.xml += "    &" + str(value.new_anchor) + ";\n"
+                self.xml += "    <!-- " + str(value.text) + " -->\n"
 
-            print("Reference %s [%s]" % (key, value.new_anchor))
-            # self.xml += "<reference anchor=" + key +
-
-        pass
+        self.xml += '</references>\n'
 
     def addBack(self):
         self.xml += "<back>\n"
