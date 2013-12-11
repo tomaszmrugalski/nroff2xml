@@ -1,14 +1,35 @@
 #
-# Experimental nroff2xml 0.0.2
-# Author: Tomek Mrugalski
+# nroff2xml 0.1.0
+#
+# Author: Tomek Mrugalski <tomasz(dot)mrugalski(at)gmail(dot)com>
+#
+# Copyright (c) 2013 IETF Trust and Tomek Mrugalski.
+# All rights reserved.
+#
+# Released under simplified BSD license, see LICENSE file for details.
+#
+# Simple tool that converts nroff I-D sources into xml2rfc format (xml)
+#
+# Usage:
+#
+# python nroff2xml.py input-file.nroff [output-file.xml]
+#
+# This script was tested successfully on RFC3315.nroff and RFC3633.nroff.
+# It may or may not work on other RFCs. RFC Editor keeps nroff files for
+# most published RFCs, so you may ask them for an nroff file, if you need it.
+#
+# The script was tested with python 2.7.5 and 3.3.2.
 #
 
-VERSION='0.0.2'
+VERSION='0.1.0'
+AUTHOR='Tomek Mrugalski'
 
 import sys
 import re
 
 # Constants
+# These will be included in the output XML file. Some of them are obvious
+# boilerplate and require update.
 
 PREAMBLE = '<?xml version="1.0" encoding="US-ASCII"?>\n';
 DOCTYPE_BEGIN = '<!DOCTYPE rfc SYSTEM "rfc2629.dtd" [\n'
@@ -23,6 +44,8 @@ HEADER_COMPACT='<?rfc compact="yes" ?>\n'
 HEADER_SUBCOMPACT='<?rfc subcompact="no" ?>\n'
 HEADER_CATEGORY='<rfc category="info" docName="draft-ietf-xml2rfc-template-05" ipr="trust200902">\n'
 
+# Unfortunately, authors are not parsed/converted, so the script puts
+# a boilerplate author there.
 AUTHOR_TEMPLATE="""<author fullname="Unknown Person" initials="X" role="editor"
             surname="Unknown">
       <organization>Not converted</organization>
@@ -41,7 +64,18 @@ AUTHOR_TEMPLATE="""<author fullname="Unknown Person" initials="X" role="editor"
       </address>
     </author>"""
 
+
+
 class Reference:
+    """
+    This class is used to keep external references found in the text.
+
+    Each reference consists of anchor (e.g. [20]), a new anchor (e.g.
+    RFC3315) and a text. That text is everything that is there in
+    Normative or informative references (e.g. Deering, S. and R. Hinden,
+    "Internet Protocol, Version 6 (IPv6)Specification", RFC 2460, December
+    1998.).
+    """
     anchor = ''
     new_anchor = 0
     text = ''
@@ -61,6 +95,14 @@ class Reference:
             self.new_anchor = "RFC" + num
 
 class Nroff2Xml:
+    """
+    This is the main converter class.
+
+    See main() method to understand the control flow. In essence, the code
+    first loads nroff as a text file, then parses it to find referneces,
+    and then goes through it again converting to XML as it goes.
+
+    """
     xml=''
     nroff=''
     sections_list = []
@@ -68,12 +110,17 @@ class Nroff2Xml:
 
     t_open = False # Are we curently in <t> tag?
 
+    # reads nroff file and stores its value in self.nroff
     def readNroff(self, infile):
         with open(infile) as f:
             self.nroff = f.readlines()
 
         print("Read %d lines from %s file." % (len(self.nroff), infile))
 
+    """
+    Starts a new section. Closes any open <t> tag before adding new <section>
+    tag.
+    """
     def startSection(self, lineno, section, section_title):
         self.sections_list.append([section, section_title, lineno])
         print("Starting section %s (%s) in line %d." % (section, section_title, lineno))
@@ -84,6 +131,9 @@ class Nroff2Xml:
 
         self.xml += '<section title="' + section_title + '"> <!-- ' + section + ', line ' + str(lineno) + '-->\n'
 
+    """
+    Ends section. Closes any open <t> tag before closing </section>
+    """
     def endSection(self):
         end_section = self.sections_list.pop()
         print("Ending section " + end_section[0] + ", started in line " + str(end_section[2]))
@@ -94,6 +144,10 @@ class Nroff2Xml:
 
         self.xml += '</section> <!-- ends: "' + end_section[0] + " from line " + str(end_section[2]) + '-->\n'
 
+    """
+    Adds preamble. Unfortunately most of it is a boilerplate.
+    However, it attempts to add references!
+    """
     def addPreamble(self):
         self.xml += PREAMBLE
 
@@ -121,15 +175,28 @@ class Nroff2Xml:
 
         self.xml += HEADER_CATEGORY
 
+    """
+    Supposed to extract title. @TODO
+    """
     def extractTitle(self):
         return "Unknown"
 
+    """
+    Supposed to extract short title. @TODO
+    """
     def extractShortTitle(self):
         return "Unknown(short)"
 
+    """
+    Supposed to extract publication date. @TODO
+    """
     def extractDate(self):
         return ["1", "January", "1900"]
 
+    """
+    Adds <front> tag that includes title, author, date for now.
+    It should feature additional stuff, like workgroup.
+    """
     def addFront(self):
         self.xml += "<front>\n"
         self.xml += '<title abbrev="' + self.extractShortTitle() +'">' + self.extractTitle() + '</title>\n'
@@ -141,20 +208,23 @@ class Nroff2Xml:
 
         self.xml += "</front>\n\n"
 
+
+    """
+    Replaces references in a given line, e.g. replaces [20] with
+    <xref target="RFC3315" />
+    """
     def expandReferences(self, line):
-        
         for key, value in self.references.items():
             old_anchor = "[" + str(value.anchor) + "]"
             new_anchor = "<xref target=\"" + str(value.new_anchor) + "\"/>"
-
-            #print("#### replace %s = %s\n" % (old_anchor, new_anchor))
-
             line = line.replace(old_anchor, new_anchor)
-
-            #sddfd
-            
         return line
 
+    """
+    Converts regular text uses in paragraphs. Sanitization (<,> removal) is also
+    performed. If there is an empty line, it is treated as end of paragraph,
+    so </t> is inserted.
+    """
     def convertText(self, line):
         if not len(self.sections_list):
             return
@@ -176,9 +246,16 @@ class Nroff2Xml:
                 self.xml += "<t>" + line + '\n'
                 self.t_open = True
 
+    """
+    Attempts to find references in the text.
+
+    Note: This was tested on only two RFCs (3315, 3633) from 2003.
+    The references style likely evolved over time, so those regexps
+    will probably need tuning.
+    """
     def findReferences(self):
 
-        references_re = re.compile("^(\d+)\.? References*$")
+        references_re = re.compile("^(\d+)\.? +References*$")
         references_end1_re = re.compile("^A\. .*$")
         references_end2_re = re.compile("^Authors' Addresses")
         reference_num = re.compile("^\[(.+)\] (.+\.)$")
@@ -241,6 +318,11 @@ class Nroff2Xml:
             print("Reference %s [%s]" % (key, value.text))
 
 
+    """
+    The actual text convesion happens here. It goes through the main part (<middle>)
+    of the text and converts its body to XML. It assumes that the sections numbers
+    are up to 4 levels deep (e.g. 1.1.1.1).
+    """
     def convert(self):
 
         # Matches section number
@@ -356,10 +438,15 @@ class Nroff2Xml:
 
         return self.xml
 
+    """
+    Generates a references list at the end of the text.
+    It don't understand the differences between normative and informative
+    references and treats all references as normative. @TODO
+    """
     def addReferences(self):
         self.xml += '<references title="Normative References">\n'
         for key, value in self.references.items():
-            
+
             if value.new_anchor.find("RFC") == -1:
                 self.xml += "<reference anchor=\"" + value.new_anchor + "\">\n"
                 self.xml += "  <front>\n"
@@ -374,6 +461,9 @@ class Nroff2Xml:
 
         self.xml += '</references>\n'
 
+    """
+    Generates <back> content. Currently there's only references tag in it.
+    """
     def addBack(self):
         self.xml += "<back>\n"
 
@@ -381,11 +471,17 @@ class Nroff2Xml:
 
         self.xml += "</back>\n"
 
+    """
+    Adds postable
+    """
     def addPostamble(self, infile):
         self.xml += "</rfc>\n"
         self.xml += "<!-- generated from file " + infile + " with nroff2xml " + VERSION \
-            + " by Tomek Mrugalski -->\n"
+            + " by " + AUTHOR + " -->\n"
 
+    """
+    Writes generated XML to a file.
+    """
     def writeXml(self, outfile):
 
         print("Writing XML output (%d bytes) to %s" % (len(self.xml), outfile))
@@ -396,7 +492,10 @@ class Nroff2Xml:
 
         f.close()
 
-    def main(argv):
+    """
+    Complete conversion routing.
+    """
+    def main(self, argv):
         if (len(argv)<1):
             print("At least one parameter is required: nroff input file")
             exit(-1)
@@ -431,4 +530,5 @@ class Nroff2Xml:
         convert.writeXml(outfile)
 
 if __name__ == "__main__":
-    Nroff2Xml.main(sys.argv[1:])
+    x = Nroff2Xml()
+    x.main(sys.argv[1:])

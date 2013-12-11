@@ -4,8 +4,7 @@ nroff2xml
 Simple tool that converts nroff I-D sources into xml2rfc format (xml)
 
 Author: Tomek Mrugalski
-Licence: to be determined, whatever open source license is acceptable
-         for IETF (likely BSD or GPL license)
+Licence: simplified BSD license
 
 Usage:
 
