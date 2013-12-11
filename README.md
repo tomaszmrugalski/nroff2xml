@@ -14,10 +14,10 @@ DONE:
 - boilerplate xml structure
 - section conversions
 - text conversion
+- convert references
 
 TODO:
 - RFC3315 section 5.6 is not converted
 - string trimming breaks down all formatting
-- convert references
 - convert authors list
 - convert name
